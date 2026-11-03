@@ -2,8 +2,22 @@
 .wrangler
 .dev.vars*
 !.dev.vars.example
+.env
 .env*
 !.env.example
+ingest/.env
 .wrangler/
 .dev.vars
-node_modules/wrangler.jsonc 
+node_modules/wrangler.jsonc
+
+# Python & SQLite runtime artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.db
+*.db-shm
+*.db-wal
+status.json
+status.json.tmp

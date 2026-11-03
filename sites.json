@@ -1,0 +1,31 @@
+{
+  "bbox": {
+    "lat_min": 35.1,
+    "lat_max": 36.6,
+    "lon_min": -98.2,
+    "lon_max": -96.5
+  },
+  "clearance_window_minutes": 30,
+  "policy_ring_mi": 10.0,
+  "advisory_ring_mi": 15.0,
+  "sites": [
+    {
+      "id": "stillwater",
+      "name": "Stillwater YMCA",
+      "lat": 36.1152,
+      "lon": -97.0624
+    },
+    {
+      "id": "mitch",
+      "name": "Mitch Park YMCA",
+      "lat": 35.6847,
+      "lon": -97.5083
+    },
+    {
+      "id": "bethany",
+      "name": "Bethany YMCA & Ripper Park",
+      "lat": 35.5051,
+      "lon": -97.6316
+    }
+  ]
+}
