@@ -25,6 +25,7 @@ USER_AGENT = "stillWeather-homelab/1.0 (+https://github.com/EcstaticTech/stillWe
 NEXRAD_COORDS: Dict[str, tuple[float, float]] = {
     "TLX": (35.3331, -97.2778),  # Oklahoma City (Twin Lakes), OK
     "OKC": (35.2361, -97.4603),  # TDWR Oklahoma City, OK
+    "TUL": (36.0703, -95.8264),  # TDWR Tulsa, OK
     "VNX": (36.7406, -98.1278),  # Vance AFB (Enid), OK
     "INX": (36.1750, -95.5644),  # Tulsa (Inola), OK
     "FDR": (34.3622, -98.9764),  # Frederick, OK

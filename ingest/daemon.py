@@ -49,12 +49,51 @@ logging.Formatter.converter = time.gmtime
 log = logging.getLogger("stillweather.daemon")
 
 
+def load_dotenv_if_present() -> None:
+    """Load key=value pairs from `.env` or `ingest/.env` without requiring python-dotenv."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates = [
+        os.path.join(repo_root, ".env"),
+        os.path.join(repo_root, "ingest", ".env"),
+    ]
+    for env_path in candidates:
+        if not os.path.isfile(env_path):
+            continue
+        with open(env_path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip("'").strip('"')
+                if key and key not in os.environ:
+                    os.environ[key] = val
+
+
+def normalize_r2_endpoint_url(endpoint: str) -> str:
+    """
+    Ensure `R2_ENDPOINT_URL` is the account-level origin (`https://<account>.r2.cloudflarestorage.com`)
+    without a trailing `/<bucket>` path (Cloudflare's bucket settings UI copies the URL with `/<bucket>`,
+    which causes boto3 `put_object(Bucket=...)` to double the bucket path and fail with AccessDenied).
+    """
+    from urllib.parse import urlsplit
+
+    raw = (endpoint or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    parts = urlsplit(raw)
+    if parts.scheme and parts.netloc:
+        return f"{parts.scheme}://{parts.netloc}"
+    return raw
+
+
 def make_r2_client() -> Optional[Any]:
     """Create a boto3 S3 client for Cloudflare R2 if credentials are configured."""
-    endpoint = os.environ.get("R2_ENDPOINT_URL", "").strip()
+    endpoint = normalize_r2_endpoint_url(os.environ.get("R2_ENDPOINT_URL", ""))
     access_key = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
     secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
-    if not (endpoint and access_key and secret_key):
+    if not (endpoint and access_key and secret_key) or "<" in endpoint or "<" in access_key:
         return None
     return boto3.client(
         "s3",
@@ -63,6 +102,7 @@ def make_r2_client() -> Optional[Any]:
         aws_secret_access_key=secret_key,
         region_name="auto",
         config=Config(
+            signature_version="s3v4",
             connect_timeout=10,
             read_timeout=15,
             retries={"max_attempts": 2, "mode": "standard"},
@@ -96,7 +136,7 @@ def upload_status_to_r2(r2_client: Any, bucket: str, key: str, body_str: str) ->
 
 def ping_healthcheck(ping_url: str) -> None:
     """Send a non-blocking dead-man-switch ping to Healthchecks.io (or Uptime Kuma)."""
-    if not ping_url:
+    if not ping_url or "<" in ping_url or ">" in ping_url:
         return
     try:
         requests.get(ping_url, timeout=5.0)
@@ -238,6 +278,7 @@ class IngestCycleRunner:
 
 
 def main() -> None:
+    load_dotenv_if_present()
     parser = argparse.ArgumentParser(description="stillWeather GOES-19 GLM & IEM NEXRAD ingest daemon")
     parser.add_argument(
         "--sites",

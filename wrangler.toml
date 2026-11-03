@@ -1,13 +1,16 @@
-# wrangler.toml — Cloudflare Worker config for stillWeather lightning proxy
+# wrangler.toml — Cloudflare Worker config for stillWeather lightning & radar status
 # ──────────────────────────────────────────────────────────────────────────────
 # Deploy with:  npx wrangler deploy
-# Set secret:   npx wrangler secret put WEATHERBIT_API_KEY
+#
+# R2 Bucket Binding:
+#   Reads `status.json` uploaded by the homelab GOES-19 GLM + IEM NEXRAD daemon.
+#   No API key or Wrangler secret is required for R2 binding reads.
 # ──────────────────────────────────────────────────────────────────────────────
 
-name            = "stillweather-lightning"
-main            = "lightning-proxy.js"
+name               = "stillweather-lightning"
+main               = "lightning-proxy.js"
 compatibility_date = "2024-11-01"
 
-# The WEATHERBIT_API_KEY is a secret — set it with:
-#   npx wrangler secret put WEATHERBIT_API_KEY
-# It will NOT be stored in this file or in your repo.
+[[r2_buckets]]
+binding     = "STATUS_BUCKET"
+bucket_name = "stillweather"

@@ -10,12 +10,17 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
 <meta name="apple-mobile-web-app-title" content="WeatherTool" />
 <link rel="manifest" href="site.webmanifest" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   :root {
     --bg: #f4f4f5; --card-bg: #ffffff; --text: #18181b; --text-muted: #71717a;
     --border: #e4e4e7; --green-bg: #dcfce7; --green-text: #166534;
     --yellow-bg: #fef08a; --yellow-text: #713f12; --amber-bg: #fef3c7;
     --amber-text: #92400e; --red-bg: #fee2e2; --red-text: #991b1b; --blue-bg: #dbeafe;
+    --surface-subtle: #fafafa; --muted-bg: #f4f4f5; --muted-text: #52525b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -23,6 +28,7 @@
       --border: #27272a; --green-bg: #052e16; --green-text: #4ade80;
       --yellow-bg: #422006; --yellow-text: #fde047; --amber-bg: #451a03;
       --amber-text: #fbbf24; --red-bg: #450a0a; --red-text: #f87171; --blue-bg: #172554;
+      --surface-subtle: #121215; --muted-bg: #27272a; --muted-text: #d4d4d8;
     }
     .github-logo { filter: invert(1); }
   }
@@ -40,6 +46,7 @@
   .status-yellow { background: var(--yellow-bg); color: var(--yellow-text); }
   .status-amber  { background: var(--amber-bg);  color: var(--amber-text); }
   .status-red    { background: var(--red-bg);    color: var(--red-text); }
+  .status-muted  { background: var(--muted-bg);  color: var(--muted-text); border: 1px solid var(--border); }
   table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
   th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid var(--border); }
   th { color: var(--text-muted); font-weight: 600; }
@@ -52,6 +59,90 @@
   .metric-label { font-size: 0.875rem; color: var(--text-muted); }
   .lightning-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
   .lightning-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+
+  /* 30-Minute Clearance Gauge & Ring Grid */
+  .lightning-layout { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; margin-top: 8px; }
+  @media (max-width: 640px) { .lightning-layout { grid-template-columns: 1fr; } }
+  .clearance-gauge-wrap {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 12px 16px; border: 1px solid var(--border); background: var(--surface-subtle); min-width: 132px;
+  }
+  .clearance-svg { width: 88px; height: 88px; transform: rotate(-90deg); }
+  .clearance-ring-bg { fill: none; stroke: var(--border); stroke-width: 8; }
+  .clearance-ring-fg {
+    fill: none; stroke: #22c55e; stroke-width: 8; stroke-linecap: round;
+    transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;
+  }
+  .clearance-gauge-center {
+    position: relative; margin-top: -64px; height: 48px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .clearance-time-val { font-size: 1.1rem; font-weight: 700; line-height: 1.1; }
+  .clearance-time-unit { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .clearance-gauge-caption { margin-top: 20px; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-align: center; }
+
+  .ring-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px;
+  }
+  @media (max-width: 640px) { .ring-grid { grid-template-columns: repeat(2, 1fr); } }
+  .ring-box {
+    border: 1px solid var(--border); background: var(--surface-subtle); padding: 8px 10px; font-size: 0.78rem;
+  }
+  .ring-box-title { font-weight: 600; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
+  .ring-box-val { font-size: 1.05rem; font-weight: 700; margin-top: 2px; }
+  .ring-box-sub { font-size: 0.7rem; color: var(--text-muted); }
+
+  .cells-alert-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .cell-alert-item {
+    border: 1px solid var(--border); background: var(--surface-subtle);
+    padding: 8px 12px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+  }
+
+  /* Segmented Control & Radar Map Toolbar */
+  .map-header-row {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;
+  }
+  .map-header-row h2 { margin-bottom: 0; }
+  .seg-control {
+    display: inline-flex; border: 1px solid var(--border); background: var(--bg); padding: 2px;
+  }
+  .seg-btn {
+    border: none; background: transparent; color: var(--text-muted);
+    padding: 6px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  }
+  .seg-btn.active {
+    background: var(--card-bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .radar-toolbar {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    padding: 8px 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-bottom: none;
+    font-size: 0.78rem;
+  }
+  .radar-controls-left, .radar-controls-right {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .radar-btn {
+    padding: 4px 10px; background: var(--card-bg); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  }
+  .radar-select {
+    padding: 3px 8px; background: var(--card-bg); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.76rem; font-weight: 600;
+  }
+  .radar-frame-pill {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 2px 8px; border: 1px solid var(--border); background: var(--card-bg); font-weight: 600;
+  }
+  .map-legend-bar {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    padding: 8px 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-top: none;
+    font-size: 0.74rem; color: var(--text-muted);
+  }
+  .legend-items { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .legend-line { display: inline-block; width: 16px; height: 0; border-top: 2px solid; margin-right: 4px; vertical-align: middle; }
+
   footer { margin-top: 48px; text-align: center; font-size: 0.875rem; color: var(--text-muted); }
   footer a { transition: color 0.2s ease; }
   footer a:hover { color: var(--text) !important; }
@@ -87,13 +178,57 @@
         <div class="grid-2" style="gap:16px;" id="current-conditions"><p>Loading live weather data...</p></div>
       </div>
     </div>
+
     <div class="lightning-section">
-      <h3>Lightning status</h3>
-      <div class="lightning-row">
-        <span id="lightning-pill" class="pill status-green">Checking...</span>
-        <span id="lightning-detail" style="font-size:0.875rem;color:var(--text-muted);">Fetching real-time strike data...</span>
+      <h3>Lightning &amp; storm status (30-min YMCA clearance)</h3>
+      <div class="lightning-layout">
+        <div class="clearance-gauge-wrap" title="YMCA 30-minute lightning safety clearance timer">
+          <svg class="clearance-svg" viewBox="0 0 100 100">
+            <circle class="clearance-ring-bg" cx="50" cy="50" r="40"></circle>
+            <circle id="clearance-ring-fg" class="clearance-ring-fg" cx="50" cy="50" r="40"
+                    stroke-dasharray="251.33" stroke-dashoffset="251.33"></circle>
+          </svg>
+          <div class="clearance-gauge-center">
+            <span id="clearance-time-val" class="clearance-time-val">0:00</span>
+            <span class="clearance-time-unit">Hold Timer</span>
+          </div>
+          <div id="clearance-gauge-caption" class="clearance-gauge-caption">All Clear</div>
+        </div>
+
+        <div>
+          <div class="lightning-row">
+            <span id="lightning-pill" class="pill status-green">Checking...</span>
+            <span id="lightning-trend-pill" class="pill" style="display:none;font-size:0.75rem;padding:2px 8px;border:1px solid var(--border);"></span>
+            <span id="lightning-detail" style="font-size:0.875rem;color:var(--text-muted);">Checking live radar &amp; lightning rings...</span>
+          </div>
+
+          <div class="ring-grid" id="ring-grid">
+            <div class="ring-box">
+              <div class="ring-box-title"><span>0–10 mi</span><span style="color:#ef4444;">Policy</span></div>
+              <div class="ring-box-val" id="ring-0-10">0</div>
+              <div class="ring-box-sub" id="ring-0-10-sub">5m: 0 · 15m: 0 · 30m: 0</div>
+            </div>
+            <div class="ring-box">
+              <div class="ring-box-title"><span>10–15 mi</span><span style="color:#f59e0b;">Buffer</span></div>
+              <div class="ring-box-val" id="ring-10-15">0</div>
+              <div class="ring-box-sub" id="ring-10-15-sub">5m: 0 · 15m: 0 · 30m: 0</div>
+            </div>
+            <div class="ring-box">
+              <div class="ring-box-title"><span>15–20 mi</span><span style="color:#3b82f6;">Monitor</span></div>
+              <div class="ring-box-val" id="ring-15-20">0</div>
+              <div class="ring-box-sub" id="ring-15-20-sub">5m: 0 · 15m: 0 · 30m: 0</div>
+            </div>
+            <div class="ring-box">
+              <div class="ring-box-title"><span>20–30 mi</span><span>Outer</span></div>
+              <div class="ring-box-val" id="ring-20-30">0</div>
+              <div class="ring-box-sub" id="ring-20-30-sub">5m: 0 · 15m: 0 · 30m: 0</div>
+            </div>
+          </div>
+
+          <div id="cells-alert-list" class="cells-alert-list"></div>
+          <div id="lightning-source" style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;"></div>
+        </div>
       </div>
-      <div id="lightning-source" style="font-size:0.75rem;color:var(--text-muted);"></div>
     </div>
   </div>
 
@@ -114,11 +249,52 @@
   </div>
 
   <div class="card">
-    <h2>Live Radar &amp; Lightning Map</h2>
-    <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);">
-      <iframe width="100%" height="350"
+    <div class="map-header-row">
+      <h2>Live Radar &amp; Lightning Map</h2>
+      <div class="seg-control" role="tablist" aria-label="Map Engine Selector">
+        <button type="button" id="tab-map-windy" class="seg-btn active" role="tab" aria-selected="true">Windy</button>
+        <button type="button" id="tab-map-glm" class="seg-btn" role="tab" aria-selected="false">GLM + NEXRAD</button>
+      </div>
+    </div>
+
+    <!-- Default View: Embedded Windy Radar/Wind Map -->
+    <div id="windy-map-container" style="display:block;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+      <iframe id="windy-iframe" width="100%" height="400"
         src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=7&overlay=radar&product=radar&level=surface&lat=36.1152&lon=-97.0624"
         frameborder="0" style="display:block;"></iframe>
+    </div>
+
+    <!-- Secondary Toggle View: Interactive Leaflet Map with CARTO Basemaps + IEM N0Q Radar + GOES-19 GLM Flashes -->
+    <div id="glm-map-container" style="display:none;">
+      <div class="radar-toolbar">
+        <div class="radar-controls-left">
+          <button type="button" id="radar-play-btn" class="radar-btn">&#9654; Play Loop</button>
+          <button type="button" id="radar-step-btn" class="radar-btn">Step &raquo;</button>
+          <span id="radar-frame-label" class="radar-frame-pill">LIVE (0m)</span>
+        </div>
+        <div class="radar-controls-right">
+          <label for="basemap-select" style="font-size:0.75rem;font-weight:600;">Map</label>
+          <select id="basemap-select" class="radar-select">
+            <option value="carto_dark" selected>CARTO Dark</option>
+            <option value="carto_voyager">CARTO Voyager</option>
+            <option value="osm">OpenStreetMap</option>
+          </select>
+          <label for="radar-opacity" style="font-size:0.75rem;font-weight:600;">Radar</label>
+          <input type="range" id="radar-opacity" min="0" max="100" value="68" style="width:80px;vertical-align:middle;" />
+        </div>
+      </div>
+      <div id="radar-map" style="width:100%;height:400px;border:1px solid var(--border);"></div>
+      <div class="map-legend-bar">
+        <div class="legend-items">
+          <span><span class="legend-line" style="border-color:#ef4444;"></span>10 mi Policy</span>
+          <span><span class="legend-line" style="border-color:#f59e0b;border-top-style:dashed;"></span>15 mi Buffer</span>
+          <span><span class="legend-line" style="border-color:#3b82f6;border-top-style:dotted;"></span>20 mi Monitor</span>
+          <span><span class="legend-dot" style="background:#22d3ee;border:1px solid #0891b2;"></span>Flash &lt;5m</span>
+          <span><span class="legend-dot" style="background:#facc15;border:1px solid #ca8a04;"></span>5–15m</span>
+          <span><span class="legend-dot" style="background:#f97316;border:1px solid #c2410c;"></span>15–30m</span>
+        </div>
+        <div>Radar mosaic &copy; <a href="https://mesonet.agron.iastate.edu/" target="_blank" style="color:inherit;">IEM</a> &middot; NEXRAD/NOAA &middot; GLM: NOAA GOES-19</div>
+      </div>
     </div>
   </div>
 
@@ -135,7 +311,7 @@
 <footer>
   <div style="display:flex;flex-direction:column;align-items:center;gap:8px;justify-content:center;">
     <div>
-      Data: National Weather Service API &bull; Lightning: <a href="https://www.weatherbit.io/" target=_blank">Weatherbit</a> via <a href="https://stillweather-lightning.ronlab.workers.dev/" target=_blank">Cloudflare Worker</a><br>
+      Data: National Weather Service API &bull; Lightning &amp; Radar: NOAA GOES-19 &amp; <a href="https://mesonet.agron.iastate.edu/" target="_blank">IEM NEXRAD</a> &bull; <a href="https://stillweather-lightning.ronlab.workers.dev/" target="_blank">System Status</a><br>
       Timestamp: <span id="timestamp">Updating...</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
@@ -146,7 +322,7 @@
         <span>GitHub</span>
       </a>
       <span style="color:var(--border);">|</span>
-      <span>last update: 2026-05-26</span>
+      <span>last update: 2026-11-03</span>
     </div>
   </div>
 </footer>
@@ -156,22 +332,22 @@
 //  CONFIGURATION
 // ============================================================
 //
-//  LIGHTNING_PROXY_URL — your Cloudflare Worker URL.
-//  The Weatherbit API key lives ONLY in the Worker's encrypted
-//  environment variables — never in this file.
+//  Dual-path distribution for status.json:
+//    1. PRIMARY_STATUS_URL:  Cloudflare Worker + R2 binding
+//    2. FALLBACK_STATUS_URL: Direct Cloudflare R2 custom domain
+//    3. LOCAL_STATUS_URL:    Local `status.json` when running on localhost / file://
 //
-//  Steps:
-//    1. Deploy lightning-proxy.js to Cloudflare Workers
-//    2. Add WEATHERBIT_API_KEY as an encrypted env variable there
-//    3. Paste your worker URL below, e.g.:
-//         'https://stillweather-lightning.YOURNAME.workers.dev'
-//    4. Leave empty to fall back to NWS forecast-text detection
-//       (no distance data, less granular — still functional)
-//
-const LIGHTNING_PROXY_URL = 'https://stillweather-lightning.ronlab.workers.dev';  // <-- set after Worker deployment
+const LIGHTNING_PROXY_URL = 'https://stillweather-lightning.ronlab.workers.dev';
+const PRIMARY_STATUS_URL  = LIGHTNING_PROXY_URL ? `${LIGHTNING_PROXY_URL}/status` : '';
+const FALLBACK_STATUS_URL = 'https://data.ronlab.site/status.json';
+const LOCAL_STATUS_URL    = 'status.json';
 
-const LIGHTNING_SEARCH_KM   = 80;  // ~50 mi — extended awareness radius (alert threshold: 25 mi)
-const LIGHTNING_SEARCH_MINS = 30;  // mirrors YMCA 30-min clearance window
+// Optional CARTO API Key (leave empty for free public CARTO raster basemaps)
+const CARTO_API_KEY       = '';
+
+const FETCH_TIMEOUT_MS      = 3200; // ~3s timeout before switching to fallback
+const STALE_THRESHOLD_S     = 180;  // >180s transitions to Standby (clear) or NWS Active Fallback
+const CLEARANCE_WINDOW_MINS = 30;   // YMCA 30-minute clearance rule
 
 // ============================================================
 //  LOCATIONS & SCHEDULES
@@ -277,8 +453,6 @@ const locations = {
     lon: -97.6316,
     grid: 'OUN/93,95',
     getSchedules: (dateStr) => {
-      // Using summer schedule for Bethany/Ripper Park
-      // Morning (Ripper Park), Evening (Bethany YMCA)
       return {
         'Monday': { morning: [], evening: [{group:'Senior',start:'16:00',end:'17:30'},{group:'Senior Dev',start:'16:00',end:'17:15'},{group:'Purple',start:'16:00',end:'17:00'}] },
         'Tuesday': { morning: [{group:'Senior',start:'06:00',end:'08:30'},{group:'Senior Dev',start:'06:45',end:'08:30'}], evening: [{group:'Senior',start:'16:00',end:'17:30'},{group:'Senior Dev',start:'16:00',end:'17:15'},{group:'Purple',start:'16:00',end:'17:00'}] },
@@ -297,10 +471,12 @@ let currentLocationKey = 'stillwater';
 // ============================================================
 //  STATE
 // ============================================================
-const daySelect   = document.getElementById('day-select');
-let weatherData   = { alerts: [], data: [] };
-let allDays       = [];
-let lightningData = null;  // null = not fetched / failed | object = API result
+const daySelect      = document.getElementById('day-select');
+let weatherData      = { alerts: [], data: [] };
+let allDays          = [];
+let statusPayload    = null;
+let statusIsStale    = false;
+let statusAgeSeconds = null;
 
 // ============================================================
 //  UTILITIES
@@ -324,141 +500,355 @@ function getStatusInfo(score) {
   if (score >= 40) return { text: 'Monitor (Low)',  cls: 'status-yellow' };
   return               { text: 'Hold',           cls: 'status-green'  };
 }
+function haversineMi(lat1, lon1, lat2, lon2) {
+  const R = 3958.7613;
+  const toRad = d => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Check if current & upcoming 3-hour NWS conditions are quiet (<40 score and zero active alerts)
+function isNwsWeatherQuiet() {
+  if (weatherData.alerts && weatherData.alerts.length > 0) return false;
+  if (!weatherData.data || weatherData.data.length === 0) return true;
+  const nowMs = Date.now();
+  const nearHours = weatherData.data.filter(h => {
+    const diffHr = (h.fullDate.getTime() - nowMs) / (1000 * 60 * 60);
+    return diffHr >= -1 && diffHr <= 4;
+  });
+  for (const h of nearHours) {
+    if (getThreatScore(h) >= 40) return false;
+  }
+  return true;
+}
 
 // ============================================================
-//  LIGHTNING — FETCH  (via Cloudflare Worker proxy)
+//  LIGHTNING & CELL STATUS — DUAL-PATH FETCH (Worker -> R2 -> Local)
 // ============================================================
 async function fetchLightningData() {
-  if (!LIGHTNING_PROXY_URL) {
-    // No proxy configured — NWS text fallback will handle scoring
-    lightningData = null;
-    updateLightningStatus();
-    return;
+  const candidates = [];
+  const isLocalHost =
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1' ||
+    location.protocol === 'file:';
+
+  if (PRIMARY_STATUS_URL) {
+    candidates.push({ url: PRIMARY_STATUS_URL });
   }
-  try {
-    const loc = locations[currentLocationKey];
-    const url =
-      `${LIGHTNING_PROXY_URL}/lightning` +
-      `?lat=${loc.lat}&lon=${loc.lon}` +
-      `&search_distance_km=${LIGHTNING_SEARCH_KM}` +
-      `&search_mins=${LIGHTNING_SEARCH_MINS}` +
-      `&sort=distance&limit=20`;
+  if (FALLBACK_STATUS_URL) {
+    candidates.push({ url: FALLBACK_STATUS_URL });
+  }
+  if (isLocalHost) {
+    candidates.push({ url: LOCAL_STATUS_URL });
+  }
 
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    // Log quota status to browser console for easy monitoring
-    const remaining = res.headers.get('X-RateLimit-Remaining');
-    const resetAt   = res.headers.get('X-RateLimit-Reset');
-    const cacheHit  = res.headers.get('X-Cache') || 'MISS';
-    if (remaining !== null) {
-      console.info(
-        `[stillWeather] Lightning API \u2014 quota remaining today: ${remaining}` +
-        ` | resets: ${resetAt} | cache: ${cacheHit}`
-      );
+  let loaded = null;
+  for (const cand of candidates) {
+    try {
+      const data = await fetchJsonWithTimeout(cand.url, FETCH_TIMEOUT_MS);
+      if (data && data.sites) {
+        loaded = data;
+        break;
+      }
+    } catch (_e) {
+      // Try next fallback endpoint silently
     }
-
-    lightningData = await res.json();
-  } catch (e) {
-    console.warn('[stillWeather] Lightning proxy error:', e.message, '\u2014 NWS text fallback active.');
-    lightningData = null;
   }
+
+  statusPayload = loaded;
+
+  if (statusPayload && statusPayload.generated_at) {
+    const genMs = Date.parse(statusPayload.generated_at);
+    statusAgeSeconds = Number.isNaN(genMs) ? 9999 : Math.max(0, Math.round((Date.now() - genMs) / 1000));
+    const healthOk = statusPayload.health ? Boolean(statusPayload.health.feed_ok) : true;
+    statusIsStale = statusAgeSeconds > STALE_THRESHOLD_S || !healthOk;
+  } else {
+    statusAgeSeconds = null;
+    statusIsStale = true;
+  }
+
   updateLightningStatus();
+  updateLeafletOverlays();
   updateDashboard();
 }
 
 // ============================================================
-//  LIGHTNING — SCORE  (distance-based, dominant signal)
+//  LIGHTNING & STORM CELL — SCORE ENGINE
 // ============================================================
-//
-//  Zone bands align to facility policy (clear pool at <=15 mi):
-//    <= 5 mi  → 92  Immediate Danger (Cancel)
-//    <=10 mi  → 88  Cancel
-//    <=15 mi  → 85  Cancel — Facility Threshold
-//    <=20 mi  → 65  Monitor (High)
-//    <=25 mi  → 45  Monitor (Low)
-//     >25 mi  → 15  Distant — Hold
-//
 function getLightningScore() {
-  const empty = { score: 0, label: null, urgency: null, hasData: false };
-  if (!lightningData) return empty;
+  const empty = {
+    score: 0,
+    label: null,
+    urgency: null,
+    hasData: false,
+    clearanceStatus: 'unknown',
+    remainingMin: 0,
+  };
 
-  const strikes = lightningData.lightning || [];
-  if (strikes.length === 0) return { ...empty, hasData: true, count: 0 };
+  if (!statusPayload || statusIsStale) return empty;
+  const site = statusPayload.sites?.[currentLocationKey];
+  if (!site) return empty;
 
-  const c        = strikes[0];   // sorted by distance (closest first)
-  const distMi   = c.distance_mi;
-  const pastMins = Math.round(c.past_mins);
-  const dir      = c.bearing_cardinal || '';
+  const status = site.clearance_status || 'clear';
+  const remMin = Number(site.clearance_remaining_min || 0);
+  const nf = site.nearest_flash || null;
+  const rc = site.ring_counts || {};
+  const count30m =
+    (rc['0_10']?.m30 || 0) +
+    (rc['10_15']?.m30 || 0) +
+    (rc['15_20']?.m30 || 0) +
+    (rc['20_30']?.m30 || 0);
 
-  let score, urgency;
-  if      (distMi <=  5) { score = 92; urgency = 'Immediate Danger';              }
-  else if (distMi <= 10) { score = 88; urgency = 'Cancel';                        }
-  else if (distMi <= 15) { score = 85; urgency = 'Cancel \u2014 Facility Threshold'; }
-  else if (distMi <= 20) { score = 65; urgency = 'Monitor High';                  }
-  else if (distMi <= 25) { score = 45; urgency = 'Monitor';                       }
-  else                   { score = 15; urgency = 'Distant';                       }
+  const cells = site.cells || [];
+  const tvsCell = cells.find(c => c.tvs && c.tvs !== 'NONE' && c.dist_mi <= 35);
+  const incomingCell = cells.find(c => c.eta_15mi_min !== null && c.eta_15mi_min <= 30);
+
+  let score = 0;
+  let urgency = 'Clear';
+
+  if (tvsCell) {
+    score = 100;
+    urgency = `Cancel \u2014 Tornado Signature (${tvsCell.id})`;
+  } else if (status === 'active_hold') {
+    if (site.strike_within_policy_ring) {
+      score = 92;
+      urgency = `Hold Pool / Cancel (${remMin.toFixed(0)}m left \u00b7 \u226410 mi Policy Ring)`;
+    } else {
+      score = 88;
+      urgency = `Hold Pool / Cancel (${remMin.toFixed(0)}m left \u00b7 10\u201315 mi Buffer)`;
+    }
+  } else if (status === 'recovering') {
+    score = 85;
+    urgency = `Recovering \u2014 ${remMin.toFixed(1)} min left in 30-min Hold`;
+  } else if (status === 'approaching') {
+    score = 68;
+    urgency = incomingCell
+      ? `Approaching Cell (ETA ${incomingCell.eta_15mi_label || `~${incomingCell.eta_15mi_min}m`})`
+      : 'Approaching Storm (15\u201330 mi)';
+  } else if ((rc['15_20']?.m30 || 0) > 0) {
+    score = 65;
+    urgency = 'Monitor High (15\u201320 mi)';
+  } else if ((rc['20_30']?.m30 || 0) > 0) {
+    score = 45;
+    urgency = 'Monitor Low (20\u201330 mi)';
+  }
+
+  const label = nf
+    ? `${nf.dist_mi.toFixed(1)}\u00a0mi ${nf.bearing} \u2014 ${nf.age_min.toFixed(1)}\u00a0min ago`
+    : null;
 
   return {
-    score, urgency,
-    label:   `${distMi.toFixed(1)}\u00a0mi ${dir} \u2014 ${pastMins}\u00a0min ago`,
-    distMi, pastMins, dir,
-    count:   lightningData.count || strikes.length,
-    hasData: true
+    score,
+    urgency,
+    label,
+    distMi: nf ? nf.dist_mi : null,
+    pastMins: nf ? Math.round(nf.age_min) : null,
+    dir: nf ? nf.bearing : '',
+    count: count30m,
+    hasData: true,
+    clearanceStatus: status,
+    remainingMin: remMin,
+    incomingCell,
   };
 }
 
 // ============================================================
-//  LIGHTNING — STATUS UI
+//  30-MINUTE CIRCULAR GAUGE & LIGHTNING STATUS UI
 // ============================================================
-function updateLightningStatus() {
-  const pill   = document.getElementById('lightning-pill');
-  const detail = document.getElementById('lightning-detail');
-  const src    = document.getElementById('lightning-source');
-  const radiusMi = Math.round(LIGHTNING_SEARCH_KM / 1.609);
+function updateClearanceGauge(remainingMin, clearanceStatus, isStale, isQuiet) {
+  const fg = document.getElementById('clearance-ring-fg');
+  const valEl = document.getElementById('clearance-time-val');
+  const capEl = document.getElementById('clearance-gauge-caption');
+  const circumference = 251.33;
 
-  if (!LIGHTNING_PROXY_URL) {
-    pill.textContent   = 'Proxy Not Configured';
-    pill.className     = 'pill status-yellow';
-    detail.textContent = 'Using NWS forecast text for lightning detection \u2014 no strike distance data.';
-    src.textContent    = 'To enable real-time distance scoring: deploy lightning-proxy.js to Cloudflare Workers, then set LIGHTNING_PROXY_URL.';
+  if (isStale) {
+    fg.style.strokeDashoffset = String(circumference);
+    if (isQuiet) {
+      fg.style.stroke = '#22c55e';
+      valEl.textContent = '0:00';
+      capEl.textContent = 'Standby · Clear';
+    } else {
+      fg.style.stroke = '#f59e0b';
+      valEl.textContent = 'NWS';
+      capEl.textContent = 'Forecast Mode';
+    }
     return;
   }
-  if (!lightningData) {
-    pill.textContent   = 'API Error';
-    pill.className     = 'pill status-amber';
-    detail.textContent = 'Proxy unreachable \u2014 falling back to NWS forecast text.';
-    src.textContent    = `Source: Cloudflare Worker (failed) \u2192 NWS text fallback`;
+
+  const clamped = Math.max(0, Math.min(CLEARANCE_WINDOW_MINS, Number(remainingMin || 0)));
+  const fraction = clamped / CLEARANCE_WINDOW_MINS;
+  const offset = circumference * (1 - fraction);
+  fg.style.strokeDashoffset = offset.toFixed(2);
+
+  if (clamped > 0) {
+    const mins = Math.floor(clamped);
+    const secs = Math.round((clamped - mins) * 60);
+    valEl.textContent = `${mins}:${String(secs).padStart(2, '0')}`;
+    if (clearanceStatus === 'active_hold') {
+      fg.style.stroke = '#ef4444';
+      capEl.textContent = 'ACTIVE HOLD';
+    } else {
+      fg.style.stroke = '#f59e0b';
+      capEl.textContent = 'RECOVERING';
+    }
+  } else {
+    valEl.textContent = '0:00';
+    fg.style.stroke = clearanceStatus === 'approaching' ? '#eab308' : '#22c55e';
+    capEl.textContent = clearanceStatus === 'approaching' ? 'APPROACHING' : 'ALL CLEAR';
+  }
+}
+
+function formatTrendBadge(trend) {
+  switch (trend) {
+    case 'approaching':
+      return { text: '\u2198 Approaching', cls: 'status-amber', show: true };
+    case 'receding':
+      return { text: '\u2197 Receding', cls: 'status-green', show: true };
+    case 'stationary':
+      return { text: '\u2194 Stationary', cls: 'status-yellow', show: true };
+    default:
+      return { text: '', cls: '', show: false };
+  }
+}
+
+function updateLightningStatus() {
+  const pill      = document.getElementById('lightning-pill');
+  const trendPill = document.getElementById('lightning-trend-pill');
+  const detail    = document.getElementById('lightning-detail');
+  const src       = document.getElementById('lightning-source');
+  const cellsList = document.getElementById('cells-alert-list');
+  const isQuiet   = isNwsWeatherQuiet();
+
+  if (statusPayload && statusPayload.sites?.[currentLocationKey]) {
+    const rc = statusPayload.sites[currentLocationKey].ring_counts || {};
+    ['0_10', '10_15', '15_20', '20_30'].forEach(key => {
+      const domKey = key.replace('_', '-');
+      const r = rc[key] || { m5: 0, m15: 0, m30: 0 };
+      const valEl = document.getElementById(`ring-${domKey}`);
+      const subEl = document.getElementById(`ring-${domKey}-sub`);
+      if (valEl) valEl.textContent = String(r.m30 || 0);
+      if (subEl) subEl.textContent = `5m: ${r.m5 || 0} \u00b7 15m: ${r.m15 || 0} \u00b7 30m: ${r.m30 || 0}`;
+    });
+  }
+
+  // Two-tier stale/offline handling: calm Standby badge when skies are clear, amber alert during active weather
+  if (!statusPayload || statusIsStale) {
+    trendPill.style.display = 'none';
+    cellsList.innerHTML = '';
+    updateClearanceGauge(0, 'clear', true, isQuiet);
+
+    if (isQuiet) {
+      pill.textContent   = 'Standby \u00b7 NWS Clear';
+      pill.className     = 'pill status-muted';
+      detail.textContent = 'No storms or lightning in the forecast \u2014 standard NWS monitoring active.';
+      src.textContent    = '';
+    } else {
+      pill.textContent   = 'Sensor Updating \u2014 NWS Forecast Active';
+      pill.className     = 'pill status-amber';
+      detail.textContent = 'Live radar & strike sensor updating \u2014 using standard NWS hourly forecast for safety scoring.';
+      src.textContent    = '';
+    }
     return;
   }
+
+  const site = statusPayload.sites?.[currentLocationKey];
+  if (!site) return;
 
   const r = getLightningScore();
+  updateClearanceGauge(r.remainingMin, r.clearanceStatus, false, isQuiet);
+
+  const tb = formatTrendBadge(site.trend);
+  if (tb.show) {
+    trendPill.style.display = 'inline-block';
+    trendPill.textContent   = tb.text;
+    trendPill.className     = 'pill ' + tb.cls;
+  } else {
+    trendPill.style.display = 'none';
+  }
+
   if (!r.score) {
     pill.textContent   = 'Clear';
     pill.className     = 'pill status-green';
-    detail.textContent = `No lightning detected within ${radiusMi}\u00a0miles in the past ${LIGHTNING_SEARCH_MINS}\u00a0minutes.`;
-    src.textContent    = `Source: Weatherbit via Cloudflare Worker \u00b7 ${r.count || 0} strikes in zone`;
+    detail.textContent = 'No lightning within 30 miles in the past 30 minutes and no storm cells projected within 15 miles.';
   } else {
     const st = getStatusInfo(r.score);
     pill.textContent   = r.urgency;
     pill.className     = 'pill ' + st.cls;
-    detail.textContent = `\u26a1 Closest: ${r.label} \u00b7 ${r.count} strike${r.count !== 1 ? 's' : ''} within ${radiusMi}\u00a0mi`;
-    src.textContent    = `Source: Weatherbit via Cloudflare Worker \u00b7 Radius: ${radiusMi}\u00a0mi, last ${LIGHTNING_SEARCH_MINS}\u00a0min`;
+    if (r.label) {
+      detail.textContent = `\u26a1 Closest strike: ${r.label} \u00b7 ${r.count} flash${r.count !== 1 ? 'es' : ''} within 30\u00a0mi (30m)`;
+    } else if (r.incomingCell) {
+      detail.textContent = `Approaching storm cell ${r.incomingCell.id} (${r.incomingCell.dist_mi}\u00a0mi ${r.incomingCell.bearing}, ${r.incomingCell.max_dbz}\u00a0dBZ)`;
+    } else {
+      detail.textContent = `${r.count} flash${r.count !== 1 ? 'es' : ''} detected within 30\u00a0mi in the last 30\u00a0min.`;
+    }
   }
+
+  // Render approaching or notable storm cells (ETA <= 45m, CPA <= 20mi, or active TVS/MESO)
+  const notableCells = (site.cells || []).filter(
+    c =>
+      c.eta_15mi_min !== null ||
+      (c.cpa_mi !== null && c.cpa_mi <= 20.0 && c.dist_mi <= 35.0) ||
+      (c.tvs && c.tvs !== 'NONE') ||
+      (c.meso && c.meso !== 'NONE' && c.dist_mi <= 35.0)
+  );
+
+  if (notableCells.length === 0) {
+    cellsList.innerHTML = '';
+  } else {
+    cellsList.innerHTML = notableCells
+      .slice(0, 3)
+      .map(c => {
+        const badges = [];
+        if (c.tvs && c.tvs !== 'NONE') {
+          badges.push(`<span class="pill status-red" style="font-size:0.7rem;padding:1px 6px;">TVS</span>`);
+        }
+        if (c.meso && c.meso !== 'NONE') {
+          badges.push(`<span class="pill status-amber" style="font-size:0.7rem;padding:1px 6px;">Rotation</span>`);
+        }
+        const eta15Str = c.eta_15mi_label
+          ? `15\u00a0mi ring ETA: <strong>${c.eta_15mi_label}</strong>`
+          : c.cpa_mi !== null
+          ? `Closest pass: <strong>${c.cpa_mi.toFixed(1)}\u00a0mi</strong>`
+          : 'Stationary';
+        const eta10Str = c.eta_10mi_label ? ` \u00b7 10\u00a0mi ETA: <strong>${c.eta_10mi_label}</strong>` : '';
+        const motionStr = c.has_motion
+          ? `moving ${c.heading_cardinal} at ${Math.round(c.speed_mph)}\u00a0mph`
+          : 'stationary';
+        return `<div class="cell-alert-item">
+          <div>
+            <strong>Storm Cell ${c.id}</strong>:
+            ${c.dist_mi.toFixed(1)}\u00a0mi ${c.bearing} \u00b7 ${c.max_dbz}\u00a0dBZ \u00b7 ${motionStr}
+            ${badges.join(' ')}
+          </div>
+          <div>${eta15Str}${eta10Str}</div>
+        </div>`;
+      })
+      .join('');
+  }
+
+  src.textContent = 'Live radar & strike tracking active';
 }
 
 // ============================================================
 //  SCORING ENGINE
 // ============================================================
-//
-//  Layer 1 — Hard overrides:  Tornado (100) / Severe TStorm warning (85 floor)
-//  Layer 2 — Lightning:       Real-time Weatherbit data (current +2 h window)
-//                             NWS text fallback for future hours / no proxy
-//  Layer 3 — Weather:         Rain max +12 | Wind max +30 | Desc max +20
-//             Rain alone cannot Cancel. Severe weather + approaching storm can bump band.
-//
 function getThreatScore(hourData) {
-  // ── 1. Hard overrides ─────────────────────────────────────────────────────
   let hasTornado = false, hasSevere = false;
   weatherData.alerts.forEach(a => {
     const al = a.toLowerCase();
@@ -472,18 +862,16 @@ function getThreatScore(hourData) {
   const desc         = (hourData.desc || '').toLowerCase();
   const hoursFromNow = (hourData.fullDate.getTime() - Date.now()) / (1000 * 60 * 60);
 
-  // ── 2a. Real-time lightning (Weatherbit, within current +2 h window) ──────
   let lightningScore = 0;
-  if (hoursFromNow <= 2) {
-    lightningScore = getLightningScore().score;
+  const liveLightning = getLightningScore();
+  if (hoursFromNow <= 2 && liveLightning.hasData) {
+    lightningScore = liveLightning.score;
   }
 
-  // ── 2b. NWS text fallback (all hours — used when proxy unavailable or >2 h) ──
-  //   Score 60 = Monitor (High) — conservative since distance is unknown
   const hasThunderForecast =
     desc.includes('tstm') || desc.includes('thunder') || desc.includes('t-storm');
   if (hasThunderForecast) {
-    if (!lightningData || hoursFromNow > 2) {
+    if (!liveLightning.hasData || hoursFromNow > 2) {
       if (pop >= 70) {
         lightningScore = 60;
       } else if (pop >= 40) {
@@ -496,8 +884,6 @@ function getThreatScore(hourData) {
     }
   }
 
-  // ── 3. Weather score (deliberately restrained — rain alone is acceptable) ──
-
   const rainScore = pop >= 80 ? 12 : pop >= 50 ? 7 : pop >= 30 ? 3 : 0;
   const windScore = gust >= 55 ? 30 : gust >= 45 ? 20 : gust >= 35 ? 12 : gust >= 25 ? 5 : 0;
 
@@ -508,19 +894,269 @@ function getThreatScore(hourData) {
 
   const weatherScore = rainScore + windScore + descScore;
 
-  // ── 4. Combine ─────────────────────────────────────────────────────────────
-  //   Weather cap prevents rain/wind from inflating a lightning-driven Cancel
   let finalScore;
   if (lightningScore >= 85) {
     finalScore = lightningScore + Math.min(weatherScore, 8);
   } else if (lightningScore > 0) {
     finalScore = lightningScore + Math.min(weatherScore, 15);
   } else {
-    finalScore = weatherScore;  // weather only — max ~62 in extreme conditions
+    finalScore = weatherScore;
   }
 
   if (hasSevere) finalScore = Math.max(finalScore, 85);
   return Math.min(finalScore, 100);
+}
+
+// ============================================================
+//  LEAFLET RADAR & GLM FLASH MAP (CARTO / FOSS BASEMAPS)
+// ============================================================
+const BASEMAP_STYLES = {
+  carto_dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    subdomains: ['a', 'b', 'c', 'd'],
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+  },
+  carto_voyager: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    subdomains: ['a', 'b', 'c', 'd'],
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+  },
+  osm: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    subdomains: ['a', 'b', 'c'],
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+  },
+};
+
+const RADAR_FRAMES = [
+  { suffix: '-m25m', label: '-25 min' },
+  { suffix: '-m20m', label: '-20 min' },
+  { suffix: '-m15m', label: '-15 min' },
+  { suffix: '-m10m', label: '-10 min' },
+  { suffix: '-m05m', label: '-5 min'  },
+  { suffix: '',      label: 'LIVE (0m)' },
+];
+
+let leafletMap        = null;
+let baseTileLayer     = null;
+let radarTileLayers   = [];
+let currentRadarFrame = RADAR_FRAMES.length - 1;
+let radarOpacityVal   = 0.68;
+let radarAnimTimer    = null;
+let ringsLayerGroup   = null;
+let flashesLayerGroup = null;
+let cellsLayerGroup   = null;
+
+function buildBaseTileLayer(styleKey) {
+  const cfg = BASEMAP_STYLES[styleKey] || BASEMAP_STYLES.carto_dark;
+  const authQuery = CARTO_API_KEY && styleKey.startsWith('carto_') ? `?api_key=${encodeURIComponent(CARTO_API_KEY)}` : '';
+  return L.tileLayer(cfg.url + authQuery, {
+    maxZoom: 18,
+    subdomains: cfg.subdomains,
+    attribution: cfg.attribution,
+  });
+}
+
+function initLeafletMap() {
+  if (leafletMap || typeof L === 'undefined') return;
+  const loc = locations[currentLocationKey];
+
+  leafletMap = L.map('radar-map', {
+    center: [loc.lat, loc.lon],
+    zoom: 9,
+    attributionControl: true,
+  });
+
+  const sel = document.getElementById('basemap-select');
+  baseTileLayer = buildBaseTileLayer(sel ? sel.value : 'carto_dark').addTo(leafletMap);
+
+  radarTileLayers = RADAR_FRAMES.map((frame, idx) => {
+    const layerName = `nexrad-n0q-900913${frame.suffix}`;
+    const tl = L.tileLayer(
+      `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/${layerName}/{z}/{x}/{y}.png`,
+      {
+        opacity: idx === currentRadarFrame ? radarOpacityVal : 0,
+        zIndex: 20 + idx,
+        maxZoom: 18,
+      }
+    );
+    tl.addTo(leafletMap);
+    return tl;
+  });
+
+  ringsLayerGroup   = L.layerGroup().addTo(leafletMap);
+  flashesLayerGroup = L.layerGroup().addTo(leafletMap);
+  cellsLayerGroup   = L.layerGroup().addTo(leafletMap);
+
+  drawSiteRings();
+  updateLeafletOverlays();
+}
+
+function setBasemapStyle(styleKey) {
+  if (!leafletMap) return;
+  if (baseTileLayer) {
+    leafletMap.removeLayer(baseTileLayer);
+  }
+  baseTileLayer = buildBaseTileLayer(styleKey).addTo(leafletMap);
+  baseTileLayer.bringToBack();
+}
+
+function setRadarFrame(frameIdx) {
+  currentRadarFrame = ((frameIdx % RADAR_FRAMES.length) + RADAR_FRAMES.length) % RADAR_FRAMES.length;
+  radarTileLayers.forEach((tl, idx) => {
+    tl.setOpacity(idx === currentRadarFrame ? radarOpacityVal : 0);
+  });
+  const lbl = document.getElementById('radar-frame-label');
+  if (lbl) lbl.textContent = RADAR_FRAMES[currentRadarFrame].label;
+}
+
+function drawSiteRings() {
+  if (!ringsLayerGroup) return;
+  ringsLayerGroup.clearLayers();
+  const loc = locations[currentLocationKey];
+  const MI_TO_M = 1609.344;
+
+  // 20 mi outer monitor ring (dotted blue)
+  L.circle([loc.lat, loc.lon], {
+    radius: 20 * MI_TO_M,
+    color: '#3b82f6',
+    weight: 1.5,
+    dashArray: '3, 6',
+    fill: false,
+    interactive: false,
+  }).addTo(ringsLayerGroup);
+
+  // 15 mi safety buffer ring (dashed amber)
+  L.circle([loc.lat, loc.lon], {
+    radius: 15 * MI_TO_M,
+    color: '#f59e0b',
+    weight: 2,
+    dashArray: '6, 6',
+    fillColor: '#f59e0b',
+    fillOpacity: 0.03,
+    interactive: false,
+  }).addTo(ringsLayerGroup);
+
+  // 10 mi strict YMCA policy ring (solid red)
+  L.circle([loc.lat, loc.lon], {
+    radius: 10 * MI_TO_M,
+    color: '#ef4444',
+    weight: 2.2,
+    fillColor: '#ef4444',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(ringsLayerGroup);
+
+  // YMCA facility center marker
+  L.circleMarker([loc.lat, loc.lon], {
+    radius: 6,
+    color: '#ffffff',
+    weight: 2,
+    fillColor: '#16a34a',
+    fillOpacity: 1,
+  })
+    .bindPopup(`<strong>${loc.name}</strong><br>Policy Ring: 10 mi &bull; Buffer Ring: 15 mi`)
+    .addTo(ringsLayerGroup);
+}
+
+function projectLatLon(lat, lon, headingDeg, distMi) {
+  const R = 3958.7613;
+  const dByR = distMi / R;
+  const brg = (headingDeg * Math.PI) / 180;
+  const lat1 = (lat * Math.PI) / 180;
+  const lon1 = (lon * Math.PI) / 180;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(dByR) + Math.cos(lat1) * Math.sin(dByR) * Math.cos(brg)
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(brg) * Math.sin(dByR) * Math.cos(lat1),
+      Math.cos(dByR) - Math.sin(lat1) * Math.sin(lat2)
+    );
+  return [(lat2 * 180) / Math.PI, (lon2 * 180) / Math.PI];
+}
+
+function updateLeafletOverlays() {
+  if (!leafletMap || !flashesLayerGroup || !cellsLayerGroup) return;
+  flashesLayerGroup.clearLayers();
+  cellsLayerGroup.clearLayers();
+
+  if (!statusPayload) return;
+  const loc = locations[currentLocationKey];
+
+  const flashes = statusPayload.recent_flashes || [];
+  flashes.forEach(f => {
+    const ageS = Number(f.age_s || 0);
+    let fillColor = '#f97316';
+    let strokeColor = '#c2410c';
+    let radius = 4.5;
+    if (ageS <= 300) {
+      fillColor = '#22d3ee';
+      strokeColor = '#0891b2';
+      radius = 6;
+    } else if (ageS <= 900) {
+      fillColor = '#facc15';
+      strokeColor = '#ca8a04';
+      radius = 5;
+    }
+
+    const distMi = haversineMi(loc.lat, loc.lon, f.lat, f.lon);
+    const ageMin = (ageS / 60).toFixed(1);
+    L.circleMarker([f.lat, f.lon], {
+      radius,
+      color: strokeColor,
+      weight: 1.2,
+      fillColor,
+      fillOpacity: 0.88,
+    })
+      .bindPopup(
+        `<strong>Lightning Flash</strong><br>` +
+          `Distance to ${loc.name}: <strong>${distMi.toFixed(1)} mi</strong><br>` +
+          `Age: ${ageMin} min ago`
+      )
+      .addTo(flashesLayerGroup);
+  });
+
+  const site = statusPayload.sites?.[currentLocationKey];
+  const cells = site?.cells || [];
+  cells.forEach(c => {
+    if (c.lat === undefined || c.lon === undefined) return;
+    const isSevere = (c.tvs && c.tvs !== 'NONE') || (c.meso && c.meso !== 'NONE');
+    const color = isSevere ? '#dc2626' : '#a855f7';
+
+    L.circleMarker([c.lat, c.lon], {
+      radius: 6,
+      color: '#ffffff',
+      weight: 1.5,
+      fillColor: color,
+      fillOpacity: 0.9,
+    })
+      .bindPopup(
+        `<strong>Storm Cell ${c.id}</strong><br>` +
+          `Distance: ${c.dist_mi.toFixed(1)} mi ${c.bearing} &bull; ${c.max_dbz} dBZ &bull; Top ${c.top_kft} kft<br>` +
+          (c.has_motion
+            ? `Motion: ${c.heading_cardinal} at ${Math.round(c.speed_mph)} mph<br>`
+            : `Motion: Stationary<br>`) +
+          (c.eta_15mi_label ? `15 mi Ring ETA: <strong>${c.eta_15mi_label}</strong><br>` : '') +
+          (c.cpa_mi !== null ? `Closest Approach: ${c.cpa_mi.toFixed(1)} mi` : '')
+      )
+      .addTo(cellsLayerGroup);
+
+    if (c.has_motion && c.speed_mph > 0 && c.heading_to_deg !== null) {
+      const dist30m = c.speed_mph * 0.5;
+      const endPt = projectLatLon(c.lat, c.lon, c.heading_to_deg, dist30m);
+      L.polyline([[c.lat, c.lon], endPt], {
+        color,
+        weight: 2.5,
+        dashArray: '4, 4',
+      }).addTo(cellsLayerGroup);
+    }
+  });
 }
 
 // ============================================================
@@ -532,13 +1168,12 @@ async function fetchWeatherData() {
     document.getElementById('current-conditions').innerHTML = '<p>Loading live weather data...</p>';
     document.getElementById('timestamp').textContent = 'Fetching...';
 
+    fetchLightningData();
+
     const [alertsRes, forecastRes] = await Promise.all([
       fetch(`https://api.weather.gov/alerts/active?point=${loc.lat},${loc.lon}`),
       fetch(`https://api.weather.gov/gridpoints/${loc.grid}/forecast/hourly`)
     ]);
-
-    // Lightning fetch is non-blocking — runs in parallel
-    fetchLightningData();
 
     const alertsJson   = await alertsRes.json();
     const forecastJson = await forecastRes.json();
@@ -570,9 +1205,9 @@ async function fetchWeatherData() {
     });
 
     document.getElementById('timestamp').textContent =
-      new Date().toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) +
-      ' (Live from NWS API)';
+      new Date().toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
 
+    updateLightningStatus();
     updateDashboard();
   } catch (e) {
     console.error(e);
@@ -641,13 +1276,12 @@ function updateDashboard() {
   vPill.textContent = overall.text;
   vPill.className   = 'pill ' + overall.cls;
   document.getElementById('verdict-reasoning').textContent = {
-    'Cancel':         'Lightning or severe weather threat in the travel/practice window. Cancellation is recommended.',
-    'Monitor (High)': 'High threat level. Monitor radar and NWS alerts very closely.',
+    'Cancel':         'Lightning hold active or severe weather threat in the travel/practice window. Cancellation / pool clear is recommended.',
+    'Monitor (High)': 'Approaching storm cell or elevated lightning threat. Monitor radar and lightning rings closely.',
     'Monitor (Low)':  'Elevated conditions. Check radar before the decision deadline.',
     'Hold':           'Conditions are generally safe for travel and practice.'
   }[overall.text] || '';
 
-  // Conditions panel
   const isToday = selectedDayStr === allDays[0];
   document.getElementById('conditions-title').textContent = isToday ? 'Current conditions' : 'Forecasted conditions';
   let displayHtml = '';
@@ -676,20 +1310,27 @@ function updateDashboard() {
   document.getElementById('current-conditions').innerHTML = displayHtml;
 
   // Decision factors
-  const dList    = document.getElementById('factors-list');
-  const radiusMi = Math.round(LIGHTNING_SEARCH_KM / 1.609);
-  const lResult  = getLightningScore();
+  const dList   = document.getElementById('factors-list');
+  const lResult = getLightningScore();
+  const isQuiet = isNwsWeatherQuiet();
   dList.innerHTML = '';
 
-  if (!LIGHTNING_PROXY_URL) {
-    dList.innerHTML += `<li>Lightning: <em style="color:var(--text-muted)">NWS text fallback (no distance data) &mdash; configure Cloudflare Worker proxy for real-time scoring</em></li>`;
-  } else if (!lightningData) {
-    dList.innerHTML += `<li>Lightning: <em style="color:var(--text-muted)">Proxy error &mdash; NWS text fallback active</em></li>`;
+  if (!statusPayload || statusIsStale) {
+    if (isQuiet) {
+      dList.innerHTML += `<li>Lightning: <strong>Clear</strong> (Standard NWS forecast monitoring active)</li>`;
+    } else {
+      dList.innerHTML += `<li>Lightning: <em style="color:var(--amber-text)">Live strike sensor updating &mdash; NWS thunderstorm forecast active</em></li>`;
+    }
   } else if (lResult.score > 0) {
-    const beyondAlert = lResult.distMi > 25;
-    dList.innerHTML += `<li>Lightning: Nearest strike: <strong>${lResult.distMi.toFixed(1)}&nbsp;mi</strong> ${lResult.dir} &mdash; ${lResult.count} strike${lResult.count !== 1 ? 's' : ''} in the last ${lResult.pastMins}&nbsp;min${beyondAlert ? ' <em style="color:var(--text-muted)">(outside alert range)</em>' : ''}</li>`;
+    const holdNote = lResult.remainingMin > 0
+      ? ` &mdash; <strong>${lResult.remainingMin.toFixed(1)}&nbsp;min remaining</strong> in 30-min hold`
+      : '';
+    const flashDesc = lResult.distMi !== null
+      ? `Nearest strike: <strong>${lResult.distMi.toFixed(1)}&nbsp;mi</strong> ${lResult.dir} (${lResult.count} in 30m)`
+      : `Approaching storm cell`;
+    dList.innerHTML += `<li>Lightning / Cells: ${flashDesc}${holdNote}</li>`;
   } else {
-    dList.innerHTML += `<li>Lightning: Nearest strike: <strong>None</strong> within ${radiusMi}&nbsp;mi in the last ${LIGHTNING_SEARCH_MINS}&nbsp;min</li>`;
+    dList.innerHTML += `<li>Lightning: <strong>Clear</strong> (0 strikes within 30&nbsp;mi in the last 30&nbsp;min)</li>`;
   }
 
   if (schedule.morning.length) {
@@ -704,13 +1345,11 @@ function updateDashboard() {
     dList.innerHTML += `<li>No practices scheduled for ${weekday}.</li>`;
   }
 
-  // Alerts
   const aList = document.getElementById('alerts-list');
   aList.innerHTML = weatherData.alerts.length === 0
     ? '<li>No active alerts</li>'
     : weatherData.alerts.map(a => `<li style="color:var(--red-text);font-weight:600;">${a}</li>`).join('');
 
-  // Group table
   const gTbody = document.getElementById('groups-tbody');
   gTbody.innerHTML = '';
   [...schedule.morning, ...schedule.evening].forEach(g => {
@@ -734,8 +1373,7 @@ function updateDashboard() {
     gTbody.appendChild(tr);
   });
 
-  // Timeline
-  const tTbody    = document.getElementById('timeline-tbody');
+  const tTbody     = document.getElementById('timeline-tbody');
   const liveStrike = getLightningScore();
   tTbody.innerHTML = '';
   dayData.forEach(hour => {
@@ -771,20 +1409,105 @@ function updateDashboard() {
 }
 
 // ============================================================
-//  INIT
+//  UI CONTROLS & INITIALIZATION
 // ============================================================
 document.querySelectorAll('input[name="location"]').forEach(el => {
   el.addEventListener('change', (e) => {
     currentLocationKey = e.target.value;
     const loc = locations[currentLocationKey];
-    const iframe = document.querySelector('iframe');
-    iframe.src = `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=7&overlay=radar&product=radar&level=surface&lat=${loc.lat}&lon=${loc.lon}`;
+    const iframe = document.getElementById('windy-iframe');
+    if (iframe) {
+      iframe.src = `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=7&overlay=radar&product=radar&level=surface&lat=${loc.lat}&lon=${loc.lon}`;
+    }
+    if (leafletMap) {
+      leafletMap.setView([loc.lat, loc.lon], 9);
+      drawSiteRings();
+      updateLeafletOverlays();
+    }
+    updateLightningStatus();
     fetchWeatherData();
   });
 });
+
+// Segmented Map Toggle: Windy (default) vs. GLM + NEXRAD (lazy-initialized Leaflet)
+const tabWindy = document.getElementById('tab-map-windy');
+const tabGlm   = document.getElementById('tab-map-glm');
+const windyBox = document.getElementById('windy-map-container');
+const glmBox   = document.getElementById('glm-map-container');
+
+tabWindy.addEventListener('click', () => {
+  tabWindy.classList.add('active');
+  tabWindy.setAttribute('aria-selected', 'true');
+  tabGlm.classList.remove('active');
+  tabGlm.setAttribute('aria-selected', 'false');
+  windyBox.style.display = 'block';
+  glmBox.style.display = 'none';
+});
+
+tabGlm.addEventListener('click', () => {
+  tabGlm.classList.add('active');
+  tabGlm.setAttribute('aria-selected', 'true');
+  tabWindy.classList.remove('active');
+  tabWindy.setAttribute('aria-selected', 'false');
+  glmBox.style.display = 'block';
+  windyBox.style.display = 'none';
+  if (!leafletMap) {
+    initLeafletMap();
+  }
+  if (leafletMap) {
+    setTimeout(() => {
+      leafletMap.invalidateSize();
+      updateLeafletOverlays();
+    }, 50);
+  }
+});
+
+// Basemap selector, radar Play/Pause, Step, and Opacity
+const basemapSelect = document.getElementById('basemap-select');
+const playBtn       = document.getElementById('radar-play-btn');
+const stepBtn       = document.getElementById('radar-step-btn');
+const opInput       = document.getElementById('radar-opacity');
+
+if (basemapSelect) {
+  basemapSelect.addEventListener('change', (e) => {
+    setBasemapStyle(e.target.value);
+  });
+}
+
+playBtn.addEventListener('click', () => {
+  if (radarAnimTimer) {
+    clearInterval(radarAnimTimer);
+    radarAnimTimer = null;
+    playBtn.innerHTML = '&#9654; Play Loop';
+  } else {
+    playBtn.innerHTML = '&#9208; Pause';
+    radarAnimTimer = setInterval(() => {
+      setRadarFrame(currentRadarFrame + 1);
+    }, 850);
+  }
+});
+
+stepBtn.addEventListener('click', () => {
+  if (radarAnimTimer) {
+    clearInterval(radarAnimTimer);
+    radarAnimTimer = null;
+    playBtn.innerHTML = '&#9654; Play Loop';
+  }
+  setRadarFrame(currentRadarFrame + 1);
+});
+
+opInput.addEventListener('input', (e) => {
+  radarOpacityVal = parseInt(e.target.value, 10) / 100.0;
+  setRadarFrame(currentRadarFrame);
+});
+
 daySelect.addEventListener('change', updateDashboard);
 document.getElementById('refresh-btn').addEventListener('click', fetchWeatherData);
+
 fetchWeatherData();
+
+// Auto-poll lightning & radar status every 60 seconds
+setInterval(fetchLightningData, 60000);
 </script>
 </body>
 </html>
