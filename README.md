@@ -54,11 +54,18 @@ python -m ingest.glm_peek
 # Run one full ingest cycle (writes local status.json and uploads to R2)
 python -m ingest.daemon --once
 
-# Run continuous daemon (45s GLM poll, 90s IEM NEXRAD poll)
-python -m ingest.daemon
+# Run continuous daemon interactively on Windows (auto-restarts on crash)
+.\start_stillWeather_daemon.bat
 ```
 
-### 3. Historical Storm Replay & Backtesting
+### 3. Windows Service Persistence (NSSM)
+To keep the daemon running across logoffs and Windows Update reboots using [NSSM](https://nssm.cc/):
+```powershell
+# Run in an Administrator terminal:
+.\ingest\windows\install_nssm_service.bat
+```
+
+### 4. Historical Storm Replay & Backtesting
 ```powershell
 python -m ingest.replay_glm --start 2026-11-03T01:00:00Z --hours 4 --site stillwater
 ```

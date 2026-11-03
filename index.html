@@ -275,8 +275,9 @@
         <div class="radar-controls-right">
           <label for="basemap-select" style="font-size:0.75rem;font-weight:600;">Map</label>
           <select id="basemap-select" class="radar-select">
-            <option value="carto_dark" selected>CARTO Dark</option>
-            <option value="carto_voyager">CARTO Voyager</option>
+            <option value="esri_dark" selected>Esri Dark Gray</option>
+            <option value="carto_dark">CartoDB Dark</option>
+            <option value="carto_voyager">CartoDB Voyager</option>
             <option value="osm">OpenStreetMap</option>
           </select>
           <label for="radar-opacity" style="font-size:0.75rem;font-weight:600;">Radar</label>
@@ -908,24 +909,33 @@ function getThreatScore(hourData) {
 }
 
 // ============================================================
-//  LEAFLET RADAR & GLM FLASH MAP (CARTO / FOSS BASEMAPS)
+//  LEAFLET RADAR & GLM FLASH MAP (ESRI / CARTODB / OSM BASEMAPS)
 // ============================================================
 const BASEMAP_STYLES = {
+  esri_dark: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    labelUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 16,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+  },
   carto_dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    subdomains: ['a', 'b', 'c', 'd'],
+    subdomains: 'abcd',
+    maxZoom: 19,
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
   },
   carto_voyager: {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    subdomains: ['a', 'b', 'c', 'd'],
+    subdomains: 'abcd',
+    maxZoom: 19,
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
   },
   osm: {
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    subdomains: ['a', 'b', 'c'],
+    subdomains: 'abc',
+    maxZoom: 19,
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
   },
@@ -942,6 +952,7 @@ const RADAR_FRAMES = [
 
 let leafletMap        = null;
 let baseTileLayer     = null;
+let baseLabelLayer    = null;
 let radarTileLayers   = [];
 let currentRadarFrame = RADAR_FRAMES.length - 1;
 let radarOpacityVal   = 0.68;
@@ -950,14 +961,37 @@ let ringsLayerGroup   = null;
 let flashesLayerGroup = null;
 let cellsLayerGroup   = null;
 
-function buildBaseTileLayer(styleKey) {
-  const cfg = BASEMAP_STYLES[styleKey] || BASEMAP_STYLES.carto_dark;
+function applyBasemapLayers(styleKey) {
+  if (!leafletMap) return;
+  const cfg = BASEMAP_STYLES[styleKey] || BASEMAP_STYLES.esri_dark;
+  if (baseTileLayer) {
+    leafletMap.removeLayer(baseTileLayer);
+    baseTileLayer = null;
+  }
+  if (baseLabelLayer) {
+    leafletMap.removeLayer(baseLabelLayer);
+    baseLabelLayer = null;
+  }
+
   const authQuery = CARTO_API_KEY && styleKey.startsWith('carto_') ? `?api_key=${encodeURIComponent(CARTO_API_KEY)}` : '';
-  return L.tileLayer(cfg.url + authQuery, {
-    maxZoom: 18,
-    subdomains: cfg.subdomains,
+  const opts = {
+    maxZoom: cfg.maxZoom || 18,
     attribution: cfg.attribution,
-  });
+    zIndex: 1,
+  };
+  if (cfg.subdomains) opts.subdomains = cfg.subdomains;
+
+  baseTileLayer = L.tileLayer(cfg.url + authQuery, opts).addTo(leafletMap);
+  baseTileLayer.bringToBack();
+
+  if (cfg.labelUrl) {
+    baseLabelLayer = L.tileLayer(cfg.labelUrl, {
+      maxZoom: cfg.maxZoom || 16,
+      zIndex: 30,
+      pane: 'overlayPane',
+      opacity: 0.85,
+    }).addTo(leafletMap);
+  }
 }
 
 function initLeafletMap() {
@@ -967,11 +1001,13 @@ function initLeafletMap() {
   leafletMap = L.map('radar-map', {
     center: [loc.lat, loc.lon],
     zoom: 9,
+    maxZoom: 16,
     attributionControl: true,
   });
+  window.leafletMap = leafletMap;
 
   const sel = document.getElementById('basemap-select');
-  baseTileLayer = buildBaseTileLayer(sel ? sel.value : 'carto_dark').addTo(leafletMap);
+  applyBasemapLayers(sel ? sel.value : 'esri_dark');
 
   radarTileLayers = RADAR_FRAMES.map((frame, idx) => {
     const layerName = `nexrad-n0q-900913${frame.suffix}`;
@@ -996,12 +1032,7 @@ function initLeafletMap() {
 }
 
 function setBasemapStyle(styleKey) {
-  if (!leafletMap) return;
-  if (baseTileLayer) {
-    leafletMap.removeLayer(baseTileLayer);
-  }
-  baseTileLayer = buildBaseTileLayer(styleKey).addTo(leafletMap);
-  baseTileLayer.bringToBack();
+  applyBasemapLayers(styleKey);
 }
 
 function setRadarFrame(frameIdx) {
@@ -1430,18 +1461,21 @@ document.querySelectorAll('input[name="location"]').forEach(el => {
 });
 
 // Segmented Map Toggle: Windy (default) vs. GLM + NEXRAD (lazy-initialized Leaflet)
-const tabWindy = document.getElementById('tab-map-windy');
-const tabGlm   = document.getElementById('tab-map-glm');
-const windyBox = document.getElementById('windy-map-container');
-const glmBox   = document.getElementById('glm-map-container');
+const tabWindy    = document.getElementById('tab-map-windy');
+const tabGlm      = document.getElementById('tab-map-glm');
+const windyBox    = document.getElementById('windy-map-container');
+const windyIframe = document.getElementById('windy-iframe');
+const glmBox      = document.getElementById('glm-map-container');
+const radarMapEl  = document.getElementById('radar-map');
 
 tabWindy.addEventListener('click', () => {
   tabWindy.classList.add('active');
   tabWindy.setAttribute('aria-selected', 'true');
   tabGlm.classList.remove('active');
   tabGlm.setAttribute('aria-selected', 'false');
-  windyBox.style.display = 'block';
   glmBox.style.display = 'none';
+  windyBox.style.display = 'block';
+  if (windyIframe) windyIframe.style.display = 'block';
 });
 
 tabGlm.addEventListener('click', () => {
@@ -1449,17 +1483,21 @@ tabGlm.addEventListener('click', () => {
   tabGlm.setAttribute('aria-selected', 'true');
   tabWindy.classList.remove('active');
   tabWindy.setAttribute('aria-selected', 'false');
-  glmBox.style.display = 'block';
+  if (windyIframe) windyIframe.style.display = 'none';
   windyBox.style.display = 'none';
-  if (!leafletMap) {
-    initLeafletMap();
-  }
-  if (leafletMap) {
-    setTimeout(() => {
-      leafletMap.invalidateSize();
+  glmBox.style.display = 'block';
+  if (radarMapEl) radarMapEl.style.display = 'block';
+
+  // Wait one frame after display:block before initializing/resizing Leaflet to prevent 0x0 bbox
+  setTimeout(() => {
+    if (!leafletMap) {
+      initLeafletMap();
+    }
+    if (leafletMap) {
+      leafletMap.invalidateSize(true);
       updateLeafletOverlays();
-    }, 50);
-  }
+    }
+  }, 50);
 });
 
 // Basemap selector, radar Play/Pause, Step, and Opacity
